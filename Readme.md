@@ -87,6 +87,42 @@ Both default to `0` if only one axis is specified.
 
 ---
 
+### `data-de-aria-horizontal-alignment`
+
+**Optional.** Controls where the badge indicator is anchored horizontally relative to the element. Honours writing direction (`start` and `end` flip in RTL).
+
+| Value | Position |
+|---|---|
+| `end-inside` *(default)* | Flush against the trailing edge of the element, **inside** its bounding box (right edge in LTR, left in RTL) |
+| `end-outside` | Just past the trailing edge of the element, **outside** its bounding box |
+| `start-inside` | Flush against the leading edge of the element, **inside** its bounding box (left edge in LTR, right in RTL) |
+| `start-outside` | Just past the leading edge of the element, **outside** its bounding box |
+
+```html
+<button data-de-aria-key="s" data-de-aria-horizontal-alignment="start-outside">Save</button>
+```
+
+---
+
+### `data-de-aria-vertical-alignment`
+
+**Optional.** Controls where the badge indicator is anchored vertically relative to the element.
+
+| Value | Position |
+|---|---|
+| `top-inside` *(default)* | Flush against the top edge of the element, **inside** its bounding box |
+| `top-outside` | Just above the top edge of the element, **outside** its bounding box |
+| `bottom-inside` | Flush against the bottom edge of the element, **inside** its bounding box |
+| `bottom-outside` | Just below the bottom edge of the element, **outside** its bounding box |
+
+```html
+<button data-de-aria-key="s" data-de-aria-vertical-alignment="bottom-outside">Save</button>
+```
+
+Combine with `data-de-aria-horizontal-alignment` and `data-de-aria-offset-x` / `data-de-aria-offset-y` for fine-grained control over badge placement.
+
+---
+
 ### `data-de-aria-indicator-class`
 
 **Optional.** Extra CSS class(es) added to the badge indicator `<span>` for this specific element, in addition to the base `de-aria-key-indicator` class. Useful for per-element styling overrides.

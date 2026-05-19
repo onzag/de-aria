@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <title>de-aria demo</title>
@@ -87,18 +87,12 @@
             padding: 2px 6px;
             border-radius: 4px;
             border: 1px solid #ffd54a;
-            margin-left: 4px;
             margin-top: -4px;
             box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
             pointer-events: none;
             z-index: 9999;
             line-height: 1;
             font-family: ui-monospace, monospace;
-        }
-
-        .de-aria-key-indicator[data-de-aria-direction="rtl"] {
-            margin-left: 0;
-            margin-right: 4px;
         }
 
         .de-aria-marked {
@@ -134,7 +128,7 @@
 
     <h2>Buttons</h2>
     <div class="toolbar">
-        <button data-de-aria-key="s" onclick="alert('Save!')">Save</button>
+        <button data-de-aria-key="s" onclick="alert('Save!')" data-de-aria-horizontal-alignment="end-outside">Save</button>
         <button data-de-aria-key="l" onclick="alert('Load!')">Load</button>
         <button data-de-aria-key="x" onclick="alert('Delete!')">Delete</button>
         <button data-de-aria-key="o" onclick="openDialog()">Open Dialog</button>

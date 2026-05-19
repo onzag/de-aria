@@ -99,12 +99,40 @@ function markFocusableElement(el) {
     indicator.dataset.deAriaDirection = direction;
     indicator.textContent = keyToUseLabel;
 
+    const position = el.dataset.deAriaHorizontalAlignment || "end-inside";
+    const positionV = el.dataset.deAriaVerticalAlignment || "top-inside";
+
     indicator.style.position = "fixed";
-    indicator.style.top = `${rect.top}px`;
+    if (positionV === "top-inside") {
+        indicator.style.top = `${rect.top}px`;
+    } else if (positionV === "top-outside") {
+        indicator.style.bottom = `${window.innerHeight - rect.top}px`;
+    } else if (positionV === "bottom-inside") {
+        indicator.style.bottom = `${window.innerHeight - rect.bottom}px`;
+    } else if (positionV === "bottom-outside") {
+        indicator.style.top = `${rect.bottom}px`;
+    }
+    
     if (direction === "rtl") {
-        indicator.style.left = `${rect.left}px`;
+        if (position === "end-inside") {
+            indicator.style.left = `${rect.left}px`;
+        } else if (position === "end-outside") {
+            indicator.style.right = `${window.innerWidth - rect.left}px`;
+        } else if (position === "start-inside") {
+            indicator.style.right = `${window.innerWidth - rect.right}px`;
+        } else if (position === "start-outside") {
+            indicator.style.left = `${rect.left + rect.width}px`;
+        }
     } else {
-        indicator.style.right = `${window.innerWidth - rect.right}px`;
+        if (position === "end-inside") {
+            indicator.style.right = `${window.innerWidth - rect.right}px`;
+        } else if (position === "end-outside") {
+            indicator.style.left = `${rect.right}px`;
+        } else if (position === "start-inside") {
+            indicator.style.left = `${rect.left}px`;
+        } else if (position === "start-outside") {
+            indicator.style.right = `${window.innerWidth - rect.left}px`;
+        }
     }
 
     if (offsetX || offsetY) {
