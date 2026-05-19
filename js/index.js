@@ -178,13 +178,14 @@ function triggerFocusableElement(el) {
  * @returns {boolean}
  */
 function isClickable(el) {
-    if (el.tagName === "BUTTON") return true;
-    if (el.tagName === "A") return true;
+    if (el.tagName === "BUTTON" || el.getAttribute("role") === "button") return true;
+    if (el.tagName === "A" || el.getAttribute("role") === "link") return true;
     if (el.tagName === "SUMMARY") return true;
     if (el.tagName === "INPUT") {
         const type = /** @type {HTMLInputElement} */ (el).type;
         return type === "checkbox" || type === "radio" || type === "submit" || type === "button" || type === "reset" || type === "image";
     }
+    if (el.dataset.deAriaAction === "click") return true;
     return false;
 }
 
@@ -366,6 +367,8 @@ document.addEventListener("DOMContentLoaded", () => {
             ctrlCombo = true;
         }
 
+        const currentlyFocused = document.activeElement;
+
         // get all the html elements that have the attribute data-de-aria-key-used equal to the pressed key
         const matchingElement = document.querySelector(`[data-de-aria-key-used="${e.key.toLowerCase()}"]`);
         if (!arrowKeys.has(e.key)) {
@@ -381,6 +384,16 @@ document.addEventListener("DOMContentLoaded", () => {
         if (matchingElement) {
             // @ts-ignore
             triggerFocusableElement(matchingElement);
+        }
+
+        if (
+            currentlyFocused &&
+            (e.key === "Enter" || e.key === " ") &&
+            // @ts-ignore
+            isClickable(currentlyFocused)
+        ) {
+            // @ts-ignore
+            currentlyFocused.click();
         }
     });
 
