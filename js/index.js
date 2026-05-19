@@ -356,16 +356,15 @@ function scrollElement(el, direction) {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-    let ctrlCombo = false;
+
+    let lastKeyDownAccessibilityVisible = false;
 
     const arrowKeys = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"]);
 
     document.addEventListener("keydown", (e) => {
-        if (e.key === "Control") {
-            ctrlCombo = false;
-        } else if (e.ctrlKey) {
-            ctrlCombo = true;
-        }
+        const isAccessibilityVisible = document.querySelector(".de-aria-key-indicator") !== null;
+
+        lastKeyDownAccessibilityVisible = isAccessibilityVisible;
 
         const currentlyFocused = document.activeElement;
 
@@ -398,7 +397,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     document.addEventListener("keyup", (e) => {
-        if (e.key === "Control" && !ctrlCombo) {
+        if (e.key === "Control" && !lastKeyDownAccessibilityVisible) {
             showAccessibility();
         }
     });
