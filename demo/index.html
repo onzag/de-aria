@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>de-aria demo</title>
+    <style>
+        :root {
+            color-scheme: light dark;
+            font-family: system-ui, sans-serif;
+        }
+
+        body {
+            margin: 0;
+            padding: 2rem;
+            max-width: 900px;
+            margin-inline: auto;
+        }
+
+        h1, h2 {
+            margin-top: 2rem;
+        }
+
+        .toolbar {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            margin-block: 1rem;
+        }
+
+        button, input, textarea, select {
+            font: inherit;
+            padding: 0.5rem 0.75rem;
+        }
+
+        .scrollbox {
+            width: 100%;
+            height: 220px;
+            overflow: auto;
+            border: 1px solid #888;
+            padding: 1rem;
+            position: relative;
+        }
+
+        .scrollbox .filler {
+            width: 1600px;
+            height: 1200px;
+            background:
+                repeating-linear-gradient(45deg, rgba(120, 120, 200, 0.18) 0 20px, transparent 20px 40px),
+                linear-gradient(135deg, #4a6cf7, #f74a7c);
+            display: grid;
+            place-items: center;
+            color: white;
+            font-size: 2rem;
+        }
+
+        /* Dialog & backdrop */
+        .backdrop {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+        }
+
+        .backdrop[data-open="true"] {
+            display: flex;
+        }
+
+        .dialog {
+            background: Canvas;
+            color: CanvasText;
+            padding: 2rem;
+            min-width: 320px;
+            max-width: 500px;
+            border-radius: 8px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+        }
+
+        /* ----- de-aria visual styling ----- */
+        .de-aria-key-indicator {
+            background: #222;
+            color: #ffd54a;
+            font-weight: bold;
+            font-size: 0.85rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+            border: 1px solid #ffd54a;
+            margin-left: 4px;
+            margin-top: -4px;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+            pointer-events: none;
+            z-index: 9999;
+            line-height: 1;
+            font-family: ui-monospace, monospace;
+        }
+
+        .de-aria-key-indicator[data-de-aria-direction="rtl"] {
+            margin-left: 0;
+            margin-right: 4px;
+        }
+
+        .de-aria-marked {
+            outline: 2px dashed #ffd54a;
+            outline-offset: 2px;
+        }
+
+        .de-aria-scroller {
+            background: rgba(0, 0, 0, 0.7);
+            border: 2px solid #ffd54a;
+            border-radius: 12px;
+            z-index: 9999;
+        }
+
+        .de-aria-scroller-arrow {
+            color: #ffd54a;
+            font-size: 1.2rem;
+            line-height: 1;
+            text-shadow: 0 1px 2px black;
+        }
+
+        .de-aria-scroll-marked {
+            outline: 2px solid #ffd54a;
+        }
+    </style>
+</head>
+<body>
+    <h1>de-aria Demo</h1>
+    <p>
+        Press and release <kbd>Ctrl</kbd> to show accessibility key hints.
+        Press any other key to hide them. Arrow keys scroll the active scroller without hiding the hints.
+    </p>
+
+    <h2>Buttons</h2>
+    <div class="toolbar">
+        <button data-de-aria-key="s" onclick="alert('Save!')">Save</button>
+        <button data-de-aria-key="l" onclick="alert('Load!')">Load</button>
+        <button data-de-aria-key="x" onclick="alert('Delete!')">Delete</button>
+        <button data-de-aria-key="o" onclick="openDialog()">Open Dialog</button>
+    </div>
+
+    <h2>Form Inputs</h2>
+    <div class="toolbar">
+        <input type="text" placeholder="Your name" data-de-aria-key="n" data-de-aria-key-label="N">
+        <textarea placeholder="Comments" data-de-aria-key="c" data-de-aria-key-label="C" rows="2"></textarea>
+        <select data-de-aria-key="g" data-de-aria-key-label="G">
+            <option>Genre</option>
+            <option>Sci-Fi</option>
+            <option>Fantasy</option>
+        </select>
+    </div>
+
+    <h2>Media</h2>
+    <div class="toolbar">
+        <audio controls data-de-aria-key="p" data-de-aria-key-label="P" data-de-aria-action="play"
+            src="https://upload.wikimedia.org/wikipedia/commons/4/4f/01_-_Bach_-_Toccata_and_Fugue_in_D_Minor.ogg"></audio>
+    </div>
+
+    <h2>Scrollable Area</h2>
+    <p>This area is marked as the active scroller. Use the arrow keys with the hints shown.</p>
+    <div class="scrollbox" data-de-role="scroller" tabindex="0" data-de-aria-key="r" data-de-aria-key-label="R">
+        <div class="filler">Scroll me in any direction</div>
+    </div>
+
+    <h2>Link with custom offset</h2>
+    <div class="toolbar">
+        <a href="#" data-de-aria-key="h" data-de-aria-key-label="H"
+            data-de-aria-offset-x="-1.2em" data-de-aria-offset-y="1.4em"
+            onclick="event.preventDefault(); alert('Help!')">Help</a>
+    </div>
+
+    <!-- Dialog: when open, background gets inert so de-aria ignores it -->
+    <div id="backdrop" class="backdrop" data-open="false">
+        <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dialog-title">
+            <h2 id="dialog-title">Dialog</h2>
+            <p>Background items should be ignored by the accessibility hints while this dialog is open.</p>
+            <div class="toolbar">
+                <button data-de-aria-key="y" onclick="alert('Yes!')">Yes</button>
+                <button data-de-aria-key="n" onclick="alert('No!')">No</button>
+                <button data-de-aria-key="q" onclick="closeDialog()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="../js/index.js"></script>
+    <script>
+        const backdrop = document.getElementById("backdrop");
+        // Everything outside the dialog backdrop. Using body's direct children except the backdrop.
+        const backgroundEls = Array.from(document.body.children).filter(el => el !== backdrop && el.tagName !== "SCRIPT");
+
+        function openDialog() {
+            backdrop.dataset.open = "true";
+            for (const el of backgroundEls) el.inert = true;
+            backdrop.querySelector("button").focus();
+        }
+
+        function closeDialog() {
+            backdrop.dataset.open = "false";
+            for (const el of backgroundEls) el.inert = false;
+        }
+    </script>
+</body>
+</html>
