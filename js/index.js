@@ -23,7 +23,7 @@ function isAccessible(el) {
     // @ts-ignore
     if (el.dataset.deAriaText === "true") return false;
     // @ts-ignore
-    if (typeof el.tabIndex === "number" && el.tabIndex < 0) return false;
+    if (!el.dataset.deRole && typeof el.tabIndex === "number" && el.tabIndex < 0) return false;
 
     // Walk up the tree checking for inert / hidden ancestors.
     // @ts-ignore
@@ -90,9 +90,49 @@ function showAccessibility() {
         markFocusableElement(el);
     }
 
+    handleDuplicates(focusable);
+
     if (scroller) {
         // @ts-ignore
         markScrollerElement(scroller);
+    }
+}
+
+/**
+ * @param {HTMLElement[]} focusableElements 
+ */
+function handleDuplicates(focusableElements) {
+    /** @type {Record<string, HTMLElement[]>} */
+    const keyMap = {};
+
+    for (const el of focusableElements) {
+        const key = el.dataset.deAriaKeyUsed;
+        if (!key) continue;
+        if (!keyMap[key]) keyMap[key] = [];
+        keyMap[key].push(el);
+    }
+
+    for (const [key, elements] of Object.entries(keyMap)) {
+        if (elements.length <= 1) continue;
+        // If multiple elements share the same key, append a nesting number to the key label of each element to differentiate them.
+        // the number must be zero padded to ensure no overlap between "Button 1" and "Button 11" for example.
+        elements.forEach((el, index) => {
+            const label = el.dataset.deAriaKeyLabelUsedOriginal;
+            const assignedNumber = String(index + 1).padStart(String(elements.length).length, "0");
+            if (label?.length === 1) {
+                el.dataset.deAriaKeyLabelUsed = `${label}${assignedNumber}`;
+            } else {
+                el.dataset.deAriaKeyLabelUsed = `${label}+${assignedNumber}`;
+            }
+
+            el.dataset.deAriaKeyNestUsed = assignedNumber;
+
+            // now update the indicator text if it exist with the new label
+            const indicator = document.querySelector(`.de-aria-key-indicator[data-de-aria-indicator-for="${el.dataset.deAriaId}"]`);
+            if (indicator) {
+                indicator.textContent = el.dataset.deAriaKeyLabelUsed;
+            }
+        });
     }
 }
 
@@ -107,14 +147,15 @@ function markFocusableElement(el) {
         console.warn(`Element ${el.tagName} is missing data-de-aria-key attribute, using "${keyToUse}" as fallback. Consider adding a specific key for better accessibility.`);
     }
 
-    const alreadyExistingKey = getSpecificElementBySelector(document, `[data-de-aria-key-used="${keyToUse}"]`);
-    if (alreadyExistingKey && alreadyExistingKey !== el) {
-        console.error(`Duplicate data-de-aria-key "${keyToUse}" found on element ${el.tagName}. One of them will not be accessible. Consider assigning unique keys to each element.`);
-    }
+    const randomId = Math.random().toString(36).slice(2);
 
     el.classList.add("de-aria-marked");
     el.setAttribute("data-de-aria-key-used", keyToUse);
+    el.setAttribute("data-de-aria-next-key-to-trigger", keyToUse);
     el.setAttribute("data-de-aria-key-label-used", keyToUseLabel);
+    el.setAttribute("data-de-aria-key-label-used-original", keyToUseLabel);
+    el.setAttribute("data-de-aria-key-nest-used", "");
+    el.setAttribute("data-de-aria-id", randomId);
 
     // these offset values can come in any unit (e.g. "10px", "1em", "5%") and should be applied as CSS variables in the stylesheet to position the key indicators accordingly
     const offsetX = el.dataset.deAriaOffsetX;
@@ -131,7 +172,7 @@ function markFocusableElement(el) {
     const indicator = document.createElement("span");
     indicator.className = `${el.dataset.deAriaIndicatorClass || ""} de-aria-key-indicator`.trim();
     indicator.setAttribute("aria-hidden", "true");
-    indicator.dataset.deAriaIndicatorFor = keyToUse;
+    indicator.dataset.deAriaIndicatorFor = randomId;
     indicator.dataset.deAriaDirection = direction;
     indicator.textContent = keyToUseLabel;
 
@@ -182,31 +223,48 @@ function markFocusableElement(el) {
  * @param {HTMLElement} el 
  */
 function triggerFocusableElement(el) {
+
+    if (el.dataset.deAriaKeyNestUsed) {
+        // If this element is part of a nested group, trigger the next element in the group instead of this one.
+        const nextNestNumber = el.dataset.deAriaKeyNestUsed[0];
+        const newNestNumber = el.dataset.deAriaKeyNestUsed.slice(1);
+
+        el.dataset.deAriaKeyNestUsed = newNestNumber;
+        el.dataset.deAriaNextKeyToTrigger = nextNestNumber;
+
+        const indicator = document.querySelector(`.de-aria-key-indicator[data-de-aria-indicator-for="${el.dataset.deAriaId}"]`);
+        if (indicator) {
+            indicator.textContent = nextNestNumber + newNestNumber;
+        }
+        return true;
+    }
+
     const action = el.dataset.deAriaAction || "default";
 
     if (action === "none") {
-        return;
+        return false;
     }
 
     if (action === "click" || action === "default" && isClickable(el)) {
         el.click();
-        return;
+        return false;
     }
 
     if (action === "focus" || action === "default" && isFocusInput(el)) {
         el.focus();
-        return;
+        return false;
     }
 
     if (action === "play" || action === "default" && isMedia(el)) {
         const media = /** @type {HTMLMediaElement} */ (el);
         if (media.paused) media.play();
         else media.pause();
-        return;
+        return false;
     }
 
     // Final fallback for "default" — just focus the element.
     el.focus();
+    return false;
 }
 
 /**
@@ -302,17 +360,13 @@ function markScrollerElement(el) {
     box.style.gridTemplateColumns = hasHorizontal ? "1fr 1fr 1fr" : "1fr";
     box.style.gridTemplateRows = hasVertical ? "1fr 1fr 1fr" : "1fr";
 
-    // Position over the centre of the scrollable area. Square when both axes scroll,
-    // otherwise a thin strip along the scrollable axis.
+    // Centre the box over the scrollable area. Size is left to CSS (width/height/padding
+    // on .de-aria-scroller, or on the user-supplied scroller class). We just anchor
+    // the centre point and let CSS decide how big it is.
     const rect = el.getBoundingClientRect();
-    const baseSize = Math.min(rect.width, rect.height) * 0.4;
-    const thickness = baseSize * 0.4;
-    const width = hasHorizontal ? baseSize : thickness;
-    const height = hasVertical ? baseSize : thickness;
-    box.style.width = `${width}px`;
-    box.style.height = `${height}px`;
-    box.style.left = `${rect.left + rect.width / 2 - width / 2}px`;
-    box.style.top = `${rect.top + rect.height / 2 - height / 2}px`;
+    box.style.left = `${rect.left + rect.width / 2}px`;
+    box.style.top = `${rect.top + rect.height / 2}px`;
+    box.style.transform = "translate(-50%, -50%)";
 
     // Toggle arrow visibility based on what is currently scrollable in each direction.
     /** @type {Record<string, { visible: boolean, row: string, col: string }>} */
@@ -341,12 +395,34 @@ function markScrollerElement(el) {
     }
 }
 
-function hideFocusableElements() {
-    getAllElementsListBySelector(document, ".de-aria-key-indicator").forEach(el => el.remove());
+/**
+ * @param {HTMLElement[]} preventHidingElements 
+ */
+function hideFocusableElements(preventHidingElements = []) {
     getAllElementsListBySelector(document, ".de-aria-marked").forEach(el => {
+        if (preventHidingElements.includes(el)) return;
+
+        const indicator = document.querySelector(`.de-aria-key-indicator[data-de-aria-indicator-for="${el.dataset.deAriaId}"]`);
+        if (indicator) indicator.remove();
+
         el.classList.remove("de-aria-marked");
         el.removeAttribute("data-de-aria-key-used");
+        el.removeAttribute("data-de-aria-next-key-to-trigger");
         el.removeAttribute("data-de-aria-key-label-used");
+        el.removeAttribute("data-de-aria-key-label-used-original");
+        el.removeAttribute("data-de-aria-key-nest-used");
+        el.removeAttribute("data-de-aria-id");
+    });
+    removeOrphanedIndicators();
+}
+
+export function removeOrphanedIndicators() {
+    // In case some indicators are left orphaned (e.g. by a hot reload during development), remove them.
+    getAllElementsListBySelector(document, ".de-aria-key-indicator").forEach(indicator => {
+        const forId = indicator.dataset.deAriaIndicatorFor;
+        if (!forId || !document.querySelector(`[data-de-aria-id="${forId}"]`)) {
+            indicator.remove();
+        }
     });
 }
 
@@ -355,10 +431,23 @@ function hideScroller() {
     getAllElementsListBySelector(document, ".de-aria-scroll-marked").forEach(el => el.classList.remove("de-aria-scroll-marked"));
 }
 
-function hideAccessibility() {
-    hideFocusableElements();
-    hideScroller();
+/**
+ * @param {HTMLElement[]} preventHidingElements 
+ */
+function hideAccessibility(preventHidingElements = []) {
+    hideFocusableElements(preventHidingElements);
+    if (preventHidingElements.length === 0) {
+        hideScroller();
+    }
 }
+
+/**
+ * Tracks rAF watchers per scroller element so multiple scrollElement calls
+ * (e.g. arrow key auto-repeat) don't create duplicate polling loops, and so
+ * we don't rely on the flaky `scrollend` event with smooth scrolling.
+ * @type {WeakMap<HTMLElement, number>}
+ */
+const SCROLLER_WATCH_FRAMES = new WeakMap();
 
 /**
  * @param {HTMLElement} el 
@@ -372,23 +461,40 @@ function scrollElement(el, direction) {
         behavior: "smooth",
     });
 
-    if ("onscrollend" in el) {
-        el.addEventListener("scrollend", () => markScrollerElement(el), { once: true });
-    } else {
-        // Fallback for browsers without scrollend: debounce the scroll event.
-        /** @type {ReturnType<typeof setTimeout>} */
-        let timer;
-        const onScroll = () => {
-            clearTimeout(timer);
-            timer = setTimeout(() => {
-                // @ts-ignore
-                el.removeEventListener("scroll", onScroll);
-                markScrollerElement(el);
-            }, 100);
-        };
-        // @ts-ignore
-        el.addEventListener("scroll", onScroll);
-    }
+    // Cancel any prior watcher so we don't have multiple polling loops fighting.
+    const existing = SCROLLER_WATCH_FRAMES.get(el);
+    if (existing) cancelAnimationFrame(existing);
+
+    // Poll with rAF until the scroll position stops changing for a few frames.
+    // This is robust against interrupted smooth scrolls where `scrollend` is
+    // unreliable across browsers.
+    let lastTop = el.scrollTop;
+    let lastLeft = el.scrollLeft;
+    let stableFrames = 0;
+    const STABLE_FRAMES_NEEDED = 3;
+
+    const tick = () => {
+        // Re-mark every frame so the box reflects current scrollability in real time.
+        markScrollerElement(el);
+
+        const currentTop = el.scrollTop;
+        const currentLeft = el.scrollLeft;
+        if (currentTop === lastTop && currentLeft === lastLeft) {
+            stableFrames++;
+        } else {
+            stableFrames = 0;
+            lastTop = currentTop;
+            lastLeft = currentLeft;
+        }
+
+        if (stableFrames >= STABLE_FRAMES_NEEDED) {
+            SCROLLER_WATCH_FRAMES.delete(el);
+            return;
+        }
+
+        SCROLLER_WATCH_FRAMES.set(el, requestAnimationFrame(tick));
+    };
+    SCROLLER_WATCH_FRAMES.set(el, requestAnimationFrame(tick));
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -402,7 +508,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const arrowKeys = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"]);
 
     document.addEventListener("keydown", (e) => {
-        const isAccessibilityVisible = getSpecificElementBySelector(document, ".de-aria-key-indicator") !== null;
+        const isAccessibilityVisible = getSpecificElementBySelector(document, ".de-aria-key-indicator") !== null || getSpecificElementBySelector(document, ".de-aria-scroll-marked") !== null;
         if (e.key === "Control") {
             makeShadowRootsAdoptAccessibilityStyles(figureConstructedSheets(), document);
         }
@@ -413,20 +519,26 @@ document.addEventListener("DOMContentLoaded", () => {
         const currentlyFocused = document.activeElement;
 
         // get all the html elements that have the attribute data-de-aria-key-used equal to the pressed key
-        const matchingElement = getSpecificElementBySelector(document, `[data-de-aria-key-used="${e.key.toLowerCase()}"]`);
+        const matchingElements = getAllElementsListBySelector(document, `[data-de-aria-next-key-to-trigger="${e.key.toLowerCase()}"]`);
+
+        let accessibilityContinuesIntoNested = false;
+        if (matchingElements) {
+            for (const el of matchingElements) {
+                const continueAccesibilityEffect = triggerFocusableElement(el);
+                if (continueAccesibilityEffect) {
+                    accessibilityContinuesIntoNested = true;
+                }
+            }
+        }
+
         if (!arrowKeys.has(e.key)) {
-            hideAccessibility();
+            hideAccessibility(accessibilityContinuesIntoNested ? matchingElements : []);
         }
 
         const currentScroller = getSpecificElementBySelector(document, ".de-aria-scroll-marked");
         if (arrowKeys.has(e.key) && currentScroller) {
             // @ts-ignore
             scrollElement(currentScroller, e.key);
-        }
-
-        if (matchingElement) {
-            // @ts-ignore
-            triggerFocusableElement(matchingElement);
         }
 
         if (
@@ -448,7 +560,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const mouseHideEvents = ["mousedown", "mouseup", "click", "contextmenu", "wheel", "pointerdown", "pointerup"];
     for (const event of mouseHideEvents) {
-        document.addEventListener(event, hideAccessibility, { passive: true });
+        document.addEventListener(event, hideAccessibility.bind(null, []), { passive: true });
     }
 });
 
