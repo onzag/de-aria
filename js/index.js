@@ -21,6 +21,8 @@ function isAccessible(el) {
     if (el.hasAttribute("disabled")) return false;
     if (el.getAttribute("aria-hidden") === "true") return false;
     // @ts-ignore
+    if (el.dataset.deAriaText === "true") return false;
+    // @ts-ignore
     if (typeof el.tabIndex === "number" && el.tabIndex < 0) return false;
 
     // Walk up the tree checking for inert / hidden ancestors.
@@ -35,18 +37,52 @@ function isAccessible(el) {
         if (style.visibility === "hidden" || style.visibility === "collapse") return false;
     }
 
-    // offsetParent === null catches elements detached from layout (also covers display:none ancestors).
-    // @ts-ignore
-    if (el.offsetParent === null && getComputedStyle(el).position !== "fixed") return false;
-
     return true;
 }
 
+/**
+ * @param {any} root 
+ * @param {string} selector
+ * @returns {HTMLElement[]}
+ */
+function getAllElementsListBySelector(root, selector) {
+    const foundElements = Array.from(root.querySelectorAll(selector));
+
+    const elementsWithShadowRoots = root.querySelectorAll("*");
+    for (const el of elementsWithShadowRoots) {
+        if (el.shadowRoot || el.root) {
+            const foundAtShadow = getAllElementsListBySelector(el.shadowRoot || el.root, selector);
+            foundElements.push(...foundAtShadow);
+        }
+    }
+    return foundElements;
+}
+
+/**
+ * 
+ * @param {any} root 
+ * @param {string} selector 
+ * @returns {HTMLElement | null}
+ */
+function getSpecificElementBySelector(root, selector) {
+    const foundHere = root.querySelector(selector);
+    if (foundHere) return foundHere;
+
+    const elementsWithShadowRoots = root.querySelectorAll("*");
+    for (const el of elementsWithShadowRoots) {
+        if (el.shadowRoot || el.root) {
+            const foundAtShadow = getSpecificElementBySelector(el.shadowRoot || el.root, selector);
+            if (foundAtShadow) return foundAtShadow;
+        }
+    }
+    return null;
+}
+
 function showAccessibility() {
-    const focusable = Array.from(document.querySelectorAll(FOCUSABLE_SELECTOR))
+    const focusable = getAllElementsListBySelector(document, FOCUSABLE_SELECTOR)
         .filter(isAccessible);
 
-    const scroller = Array.from(document.querySelectorAll('[data-de-role="scroller"]'))
+    const scroller = getAllElementsListBySelector(document, '[data-de-role="scroller"]')
         .find(isAccessible) || null;
 
     for (const el of focusable) {
@@ -71,7 +107,7 @@ function markFocusableElement(el) {
         console.warn(`Element ${el.tagName} is missing data-de-aria-key attribute, using "${keyToUse}" as fallback. Consider adding a specific key for better accessibility.`);
     }
 
-    const alreadyExistingKey = document.querySelector(`[data-de-aria-key-used="${keyToUse}"]`);
+    const alreadyExistingKey = getSpecificElementBySelector(document, `[data-de-aria-key-used="${keyToUse}"]`);
     if (alreadyExistingKey && alreadyExistingKey !== el) {
         console.error(`Duplicate data-de-aria-key "${keyToUse}" found on element ${el.tagName}. One of them will not be accessible. Consider assigning unique keys to each element.`);
     }
@@ -112,7 +148,7 @@ function markFocusableElement(el) {
     } else if (positionV === "bottom-outside") {
         indicator.style.top = `${rect.bottom}px`;
     }
-    
+
     if (direction === "rtl") {
         if (position === "end-inside") {
             indicator.style.left = `${rect.left}px`;
@@ -215,7 +251,7 @@ function markScrollerElement(el) {
 
     // Reuse the existing overlay box if this element has already been marked, otherwise build it.
     /** @type {HTMLElement | null} */
-    let box = document.querySelector(".de-aria-scroller");
+    let box = getSpecificElementBySelector(document, ".de-aria-scroller");
     if (!box) {
         box = document.createElement("div");
         box.className = `${el.dataset.deAriaScrollerClass || ""} de-aria-scroller`.trim();
@@ -281,9 +317,9 @@ function markScrollerElement(el) {
     // Toggle arrow visibility based on what is currently scrollable in each direction.
     /** @type {Record<string, { visible: boolean, row: string, col: string }>} */
     const layout = {
-        up:    { visible: canUp,    row: "1", col: hasHorizontal ? "2" : "1" },
-        down:  { visible: canDown,  row: hasVertical ? "3" : "1", col: hasHorizontal ? "2" : "1" },
-        left:  { visible: canLeft,  row: hasVertical ? "2" : "1", col: "1" },
+        up: { visible: canUp, row: "1", col: hasHorizontal ? "2" : "1" },
+        down: { visible: canDown, row: hasVertical ? "3" : "1", col: hasHorizontal ? "2" : "1" },
+        left: { visible: canLeft, row: hasVertical ? "2" : "1", col: "1" },
         right: { visible: canRight, row: hasVertical ? "2" : "1", col: hasHorizontal ? "3" : "1" },
     };
     for (const [name, info] of Object.entries(layout)) {
@@ -306,8 +342,8 @@ function markScrollerElement(el) {
 }
 
 function hideFocusableElements() {
-    document.querySelectorAll(".de-aria-key-indicator").forEach(el => el.remove());
-    document.querySelectorAll(".de-aria-marked").forEach(el => {
+    getAllElementsListBySelector(document, ".de-aria-key-indicator").forEach(el => el.remove());
+    getAllElementsListBySelector(document, ".de-aria-marked").forEach(el => {
         el.classList.remove("de-aria-marked");
         el.removeAttribute("data-de-aria-key-used");
         el.removeAttribute("data-de-aria-key-label-used");
@@ -315,8 +351,8 @@ function hideFocusableElements() {
 }
 
 function hideScroller() {
-    document.querySelectorAll(".de-aria-scroller").forEach(el => el.remove());
-    document.querySelectorAll(".de-aria-scroll-marked").forEach(el => el.classList.remove("de-aria-scroll-marked"));
+    getAllElementsListBySelector(document, ".de-aria-scroller").forEach(el => el.remove());
+    getAllElementsListBySelector(document, ".de-aria-scroll-marked").forEach(el => el.classList.remove("de-aria-scroll-marked"));
 }
 
 function hideAccessibility() {
@@ -358,23 +394,31 @@ function scrollElement(el, direction) {
 document.addEventListener("DOMContentLoaded", () => {
 
     let lastKeyDownAccessibilityVisible = false;
+    /**
+     * @type {string | null}
+     */
+    let lastKeyDown = null;
 
     const arrowKeys = new Set(["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"]);
 
     document.addEventListener("keydown", (e) => {
-        const isAccessibilityVisible = document.querySelector(".de-aria-key-indicator") !== null;
+        const isAccessibilityVisible = getSpecificElementBySelector(document, ".de-aria-key-indicator") !== null;
+        if (e.key === "Control") {
+            makeShadowRootsAdoptAccessibilityStyles(figureConstructedSheets(), document);
+        }
 
         lastKeyDownAccessibilityVisible = isAccessibilityVisible;
+        lastKeyDown = e.key;
 
         const currentlyFocused = document.activeElement;
 
         // get all the html elements that have the attribute data-de-aria-key-used equal to the pressed key
-        const matchingElement = document.querySelector(`[data-de-aria-key-used="${e.key.toLowerCase()}"]`);
+        const matchingElement = getSpecificElementBySelector(document, `[data-de-aria-key-used="${e.key.toLowerCase()}"]`);
         if (!arrowKeys.has(e.key)) {
             hideAccessibility();
         }
 
-        const currentScroller = document.querySelector(".de-aria-scroll-marked");
+        const currentScroller = getSpecificElementBySelector(document, ".de-aria-scroll-marked");
         if (arrowKeys.has(e.key) && currentScroller) {
             // @ts-ignore
             scrollElement(currentScroller, e.key);
@@ -397,7 +441,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     document.addEventListener("keyup", (e) => {
-        if (e.key === "Control" && !lastKeyDownAccessibilityVisible) {
+        if (lastKeyDown === "Control" && !lastKeyDownAccessibilityVisible) {
             showAccessibility();
         }
     });
@@ -407,3 +451,49 @@ document.addEventListener("DOMContentLoaded", () => {
         document.addEventListener(event, hideAccessibility, { passive: true });
     }
 });
+
+/**
+ * @type {Record<string, CSSStyleSheet>}
+ */
+const CONSTRUCTED_SHEETS = {};
+function figureConstructedSheets() {
+    const sheets = Array.from(document.querySelectorAll("[data-de-aria-stylesheet=\"true\"]")).map(el => {
+        // @ts-ignore
+        return el.sheet;
+    }).filter(sheet => sheet) /** @type {CSSStyleSheet[]} */;
+
+    const finalSheets = [];
+    for (const sheet of sheets) {
+        if (!CONSTRUCTED_SHEETS[sheet.href]) {
+            const constructedSheet = new CSSStyleSheet();
+            const css = Array.from(sheet.cssRules)
+                .map(rule => rule.cssText)
+                .join('\n');
+            constructedSheet.replaceSync(css);
+            CONSTRUCTED_SHEETS[sheet.href] = constructedSheet;
+        }
+        finalSheets.push(CONSTRUCTED_SHEETS[sheet.href]);
+    }
+
+    return finalSheets;
+}
+
+/**
+ * @param {CSSStyleSheet[]} sheets
+ * @param {any} root 
+ */
+function makeShadowRootsAdoptAccessibilityStyles(sheets, root) {
+    const elementsWithShadowRoots = root.querySelectorAll("*");
+    for (const el of elementsWithShadowRoots) {
+        if (el.shadowRoot || el.root) {
+            const shadow = el.shadowRoot || el.root;
+            for (const sheet of sheets) {
+                if (shadow.adoptedStyleSheets && !shadow.adoptedStyleSheets.includes(sheet)) {
+                    // @ts-ignore
+                    shadow.adoptedStyleSheets = [...(shadow.adoptedStyleSheets || []), sheet];
+                }
+            }
+            makeShadowRootsAdoptAccessibilityStyles(sheets, shadow);
+        }
+    }
+}

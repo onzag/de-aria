@@ -20,6 +20,20 @@ Import the script as an ES module. No framework or build step required.
 
 These are the attributes you place on your own elements to control behaviour. All attribute names follow the `data-de-aria-*` convention.
 
+### `data-de-aria-text=true`
+
+Marks an element as text, meant to be tabbed and read only, not interacted with. This is for elements that are focusable but shouldn't be triggered by key presses, for example a custom dropdown built with a `<details>` element where the summary should be focused but not "clicked" when the user presses the key.
+
+```html
+<details>
+    <summary data-de-aria-text="true">Choose an option</summary>
+    <ul>
+        <li><a href="/option1" data-de-aria-key="1">Option 1</a></li>
+        <li><a href="/option2" data-de-aria-key="2">Option 2</a></li>
+    </ul>
+</details>
+```
+
 ### `data-de-aria-key`
 
 **Required on every interactive element.**
@@ -244,6 +258,14 @@ Added to the `[data-de-role="scroller"]` element itself while the overlay is act
 ```
 
 ---
+
+## Shadow DOM Support
+
+The library allows to pierce the shadow DOM so as long as the root is exposed inside the property of `.shadowRoot` or `.root`
+
+## Stylesheets in Shadow DOM
+
+The library supports piercing stylesheets in shadow DOM. To do this, add the `data-de-aria-stylesheet="true"` attribute to any `<link rel="stylesheet">` element you want to be supported in shadow DOM. The library will find these, construct new `CSSStyleSheet` instances from their rules, and adopt them into shadow roots when accessibility hints are shown.
 
 ## Accessibility & Layering
 
