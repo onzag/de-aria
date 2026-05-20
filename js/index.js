@@ -78,6 +78,25 @@ function getSpecificElementBySelector(root, selector) {
     return null;
 }
 
+/**
+ * Returns the deepest focused element, piercing shadow roots.
+ * `document.activeElement` stops at the shadow host; this walks into
+ * each shadow root's activeElement until there is no deeper one.
+ * @returns {Element | null}
+ */
+function getDeepActiveElement() {
+    let el = document.activeElement;
+    while (el) {
+        const shadow = /** @type {any} */ (el).shadowRoot || /** @type {any} */ (el).root;
+        if (shadow && shadow.activeElement) {
+            el = shadow.activeElement;
+        } else {
+            break;
+        }
+    }
+    return el;
+}
+
 function showAccessibility() {
     const focusable = getAllElementsListBySelector(document, FOCUSABLE_SELECTOR)
         .filter(isAccessible);
@@ -517,7 +536,7 @@ document.addEventListener("DOMContentLoaded", () => {
         lastKeyDownAccessibilityVisible = isAccessibilityVisible;
         lastKeyDown = e.key;
 
-        const currentlyFocused = document.activeElement;
+        const currentlyFocused = getDeepActiveElement();
 
         // get all the html elements that have the attribute data-de-aria-key-used equal to the pressed key
         const matchingElements = getAllElementsListBySelector(document, `[data-de-aria-next-key-to-trigger="${e.key.toLowerCase()}"]`);
