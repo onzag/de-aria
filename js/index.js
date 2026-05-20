@@ -224,7 +224,7 @@ function markFocusableElement(el) {
     el.setAttribute("data-de-aria-id", randomId);
 
     // these offset values can come in any unit (e.g. "10px", "1em", "5%") and should be applied as CSS variables in the stylesheet to position the key indicators accordingly
-    const offsetX = el.dataset.deAriaOffsetX;
+    let offsetX = el.dataset.deAriaOffsetX;
     const offsetY = el.dataset.deAriaOffsetY;
 
     // Determine writing direction so the indicator sits on the trailing edge of the element.
@@ -289,6 +289,10 @@ function markFocusableElement(el) {
         indicator.style.top = `${elBottom}px`;
     }
 
+    if (direction === "rtl" && offsetX) {
+        offsetX = `calc(-1 * ${offsetX})`;
+    }
+
     if (direction === "rtl") {
         if (position === "end-inside") {
             indicator.style.left = `${elLeft}px`;
@@ -335,35 +339,35 @@ function triggerFocusableElement(el) {
         if (indicator) {
             indicator.textContent = nextNestNumber + newNestNumber;
         }
-        return true;
+        return {continueAccessibility: true, ranFocus: false};
     }
 
     const action = el.dataset.deAriaAction || "default";
 
     if (action === "none") {
-        return false;
+        return {continueAccessibility: false, ranFocus: false};
     }
 
     if (action === "click" || action === "default" && isClickable(el)) {
         el.click();
-        return false;
+        return {continueAccessibility: false, ranFocus: false};
     }
 
     if (action === "focus" || action === "default" && isFocusInput(el)) {
         el.focus();
-        return false;
+        return {continueAccessibility: false, ranFocus: true};
     }
 
     if (action === "play" || action === "default" && isMedia(el)) {
         const media = /** @type {HTMLMediaElement} */ (el);
         if (media.paused) media.play();
         else media.pause();
-        return false;
+        return {continueAccessibility: false, ranFocus: false};
     }
 
     // Final fallback for "default" — just focus the element.
     el.focus();
-    return false;
+    return {continueAccessibility: false, ranFocus: true};
 }
 
 /**
@@ -625,13 +629,26 @@ document.addEventListener("DOMContentLoaded", () => {
         const matchingElements = getAllElementsListBySelector(document, `[data-de-aria-next-key-to-trigger="${e.key.toLowerCase()}"]`);
 
         let accessibilityContinuesIntoNested = false;
+        let shouldPreventDefault = false;
+        let shouldStopPropagation = false;
         if (matchingElements) {
             for (const el of matchingElements) {
-                const continueAccesibilityEffect = triggerFocusableElement(el);
-                if (continueAccesibilityEffect) {
+                const triggerInfo = triggerFocusableElement(el);
+                if (triggerInfo.continueAccessibility) {
                     accessibilityContinuesIntoNested = true;
                 }
+                if (triggerInfo.ranFocus || triggerInfo.continueAccessibility) {
+                    shouldPreventDefault = true;
+                    shouldStopPropagation = true;
+                }
             }
+        }
+
+        if (shouldPreventDefault) {
+            e.preventDefault();
+        }
+        if (shouldStopPropagation) {
+            e.stopPropagation();
         }
 
         if (!arrowKeys.has(e.key)) {
