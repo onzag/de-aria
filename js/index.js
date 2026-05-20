@@ -98,23 +98,27 @@ function getDeepActiveElement() {
 }
 
 function showAccessibility() {
-    const focusable = getAllElementsListBySelector(document, FOCUSABLE_SELECTOR)
-        .filter(isAccessible);
+    showAccessibilityFocusables();
 
     const scroller = getAllElementsListBySelector(document, '[data-de-role="scroller"]')
         .find(isAccessible) || null;
 
+    if (scroller) {
+        // @ts-ignore
+        markScrollerElement(scroller);
+    }
+}
+
+function showAccessibilityFocusables() {
+    const focusable = getAllElementsListBySelector(document, FOCUSABLE_SELECTOR)
+        .filter(isAccessible);
+    
     for (const el of focusable) {
         // @ts-ignore
         markFocusableElement(el);
     }
 
     handleDuplicates(focusable);
-
-    if (scroller) {
-        // @ts-ignore
-        markScrollerElement(scroller);
-    }
 }
 
 /**
@@ -147,12 +151,55 @@ function handleDuplicates(focusableElements) {
             el.dataset.deAriaKeyNestUsed = assignedNumber;
 
             // now update the indicator text if it exist with the new label
-            const indicator = document.querySelector(`.de-aria-key-indicator[data-de-aria-indicator-for="${el.dataset.deAriaId}"]`);
+            const indicator = getSpecificElementBySelector(document, `.de-aria-key-indicator[data-de-aria-indicator-for="${el.dataset.deAriaId}"]`);
             if (indicator) {
                 indicator.textContent = el.dataset.deAriaKeyLabelUsed;
             }
         });
     }
+}
+
+/**
+ * Walk up the DOM from `el` (crossing shadow root boundaries) and return the
+ * intersection of all clipping ancestors' bounding rects in viewport coords.
+ * Returns null if no clipping ancestor is found (no clip needed).
+ * @param {HTMLElement} el
+ * @returns {{ top: number, right: number, bottom: number, left: number } | null}
+ */
+function getClippingRect(el) {
+    let clip = { top: 0, right: window.innerWidth, bottom: window.innerHeight, left: 0 };
+    let found = false;
+
+    /** @type {any} */
+    let node = el.parentNode;
+    while (node && node !== document) {
+        // Cross shadow root boundaries
+        if (node.nodeType === 11 /* DOCUMENT_FRAGMENT_NODE */) {
+            node = node.host;
+            continue;
+        }
+        if (node.nodeType !== 1) {
+            node = node.parentNode;
+            continue;
+        }
+
+        const style = getComputedStyle(node);
+        const overflow = style.overflow + " " + style.overflowX + " " + style.overflowY;
+        const clips = overflow.includes("hidden") || overflow.includes("auto") || overflow.includes("scroll") || overflow.includes("clip");
+
+        if (clips) {
+            const r = node.getBoundingClientRect();
+            clip.top    = Math.max(clip.top,    r.top);
+            clip.right  = Math.min(clip.right,  r.right);
+            clip.bottom = Math.min(clip.bottom, r.bottom);
+            clip.left   = Math.max(clip.left,   r.left);
+            found = true;
+        }
+
+        node = node.parentNode;
+    }
+
+    return found ? clip : null;
 }
 
 /**
@@ -183,11 +230,6 @@ function markFocusableElement(el) {
     // Determine writing direction so the indicator sits on the trailing edge of the element.
     const direction = getComputedStyle(el).direction === "rtl" ? "rtl" : "ltr";
 
-    // Anchor the indicator to the element's bounding box. Using position:fixed so it overlays correctly
-    // regardless of ancestor overflow/clipping. It is short-lived (cleared by hideAccessibility) so we
-    // don't try to track scroll/resize updates.
-    const rect = el.getBoundingClientRect();
-
     const indicator = document.createElement("span");
     indicator.className = `${el.dataset.deAriaIndicatorClass || ""} de-aria-key-indicator`.trim();
     indicator.setAttribute("aria-hidden", "true");
@@ -198,36 +240,74 @@ function markFocusableElement(el) {
     const position = el.dataset.deAriaHorizontalAlignment || "end-inside";
     const positionV = el.dataset.deAriaVerticalAlignment || "top-inside";
 
-    indicator.style.position = "fixed";
+    // Append next to the element first, so the indicator gets an offsetParent
+    // we can use as its containing block. With position:absolute the parent's
+    // overflow:hidden naturally clips the indicator visually — no clip-path
+    // needed — while the indicator stays in the DOM so key triggering still
+    // works even when it isn't visible.
+    indicator.style.position = "absolute";
+    indicator.style.visibility = "hidden"; // hide until positioned to avoid flash
+    // @ts-ignore
+    (el.parentNode || document.body).appendChild(indicator);
+
+    if (el.parentNode) {
+        // check that the position is relative or absolute, if not emit a warning that the indicator may be misaligned and suggest adding `position: relative` to the parent element or using `data-de-aria-indicator-class` to specify a custom class for better control over indicator positioning
+        // @ts-ignore
+        const parentStyle = getComputedStyle(el.parentNode);
+        if (parentStyle.position !== "relative" && parentStyle.position !== "absolute" && parentStyle.position !== "fixed") {
+            console.error(`Parent element of ${el.tagName} with data-de-aria-key should have position: relative, absolute, or fixed for correct indicator alignment. Consider adding "position: relative" to the parent`);
+            console.log("Parent element:", el.parentNode);
+        }
+    }
+
+    // The containing block for an absolutely-positioned element is its
+    // offsetParent's padding edge (or the initial containing block if none).
+    /** @type {HTMLElement} */
+    // @ts-ignore
+    const cb = indicator.offsetParent || document.body;
+    const cbRect = cb.getBoundingClientRect();
+    const cbScrollTop = cb.scrollTop || 0;
+    const cbScrollLeft = cb.scrollLeft || 0;
+    const cbWidth = cb.clientWidth;
+    const cbHeight = cb.clientHeight;
+
+    // Convert the element's viewport-space rect into the containing block's
+    // coordinate space (origin = top-left of unscrolled content of cb).
+    const rect = el.getBoundingClientRect();
+    const elTop    = rect.top    - cbRect.top  + cbScrollTop;
+    const elLeft   = rect.left   - cbRect.left + cbScrollLeft;
+    const elBottom = elTop  + rect.height;
+    const elRight  = elLeft + rect.width;
+
     if (positionV === "top-inside") {
-        indicator.style.top = `${rect.top}px`;
+        indicator.style.top = `${elTop}px`;
     } else if (positionV === "top-outside") {
-        indicator.style.bottom = `${window.innerHeight - rect.top}px`;
+        indicator.style.bottom = `${cbHeight - elTop}px`;
     } else if (positionV === "bottom-inside") {
-        indicator.style.bottom = `${window.innerHeight - rect.bottom}px`;
+        indicator.style.bottom = `${cbHeight - elBottom}px`;
     } else if (positionV === "bottom-outside") {
-        indicator.style.top = `${rect.bottom}px`;
+        indicator.style.top = `${elBottom}px`;
     }
 
     if (direction === "rtl") {
         if (position === "end-inside") {
-            indicator.style.left = `${rect.left}px`;
+            indicator.style.left = `${elLeft}px`;
         } else if (position === "end-outside") {
-            indicator.style.right = `${window.innerWidth - rect.left}px`;
+            indicator.style.right = `${cbWidth - elLeft}px`;
         } else if (position === "start-inside") {
-            indicator.style.right = `${window.innerWidth - rect.right}px`;
+            indicator.style.right = `${cbWidth - elRight}px`;
         } else if (position === "start-outside") {
-            indicator.style.left = `${rect.left + rect.width}px`;
+            indicator.style.left = `${elRight}px`;
         }
     } else {
         if (position === "end-inside") {
-            indicator.style.right = `${window.innerWidth - rect.right}px`;
+            indicator.style.right = `${cbWidth - elRight}px`;
         } else if (position === "end-outside") {
-            indicator.style.left = `${rect.right}px`;
+            indicator.style.left = `${elRight}px`;
         } else if (position === "start-inside") {
-            indicator.style.left = `${rect.left}px`;
+            indicator.style.left = `${elLeft}px`;
         } else if (position === "start-outside") {
-            indicator.style.right = `${window.innerWidth - rect.left}px`;
+            indicator.style.right = `${cbWidth - elLeft}px`;
         }
     }
 
@@ -235,7 +315,7 @@ function markFocusableElement(el) {
         indicator.style.transform = `translate(${offsetX || "0"}, ${offsetY || "0"})`;
     }
 
-    document.body.appendChild(indicator);
+    indicator.style.visibility = "";
 }
 
 /**
@@ -251,7 +331,7 @@ function triggerFocusableElement(el) {
         el.dataset.deAriaKeyNestUsed = newNestNumber;
         el.dataset.deAriaNextKeyToTrigger = nextNestNumber;
 
-        const indicator = document.querySelector(`.de-aria-key-indicator[data-de-aria-indicator-for="${el.dataset.deAriaId}"]`);
+        const indicator = getSpecificElementBySelector(document, `.de-aria-key-indicator[data-de-aria-indicator-for="${el.dataset.deAriaId}"]`);
         if (indicator) {
             indicator.textContent = nextNestNumber + newNestNumber;
         }
@@ -422,7 +502,7 @@ function hideFocusableElements(preventHidingElements = []) {
     getAllElementsListBySelector(document, ".de-aria-marked").forEach(el => {
         if (preventHidingElements.includes(el)) return;
 
-        const indicator = document.querySelector(`.de-aria-key-indicator[data-de-aria-indicator-for="${el.dataset.deAriaId}"]`);
+        const indicator = getSpecificElementBySelector(document, `.de-aria-key-indicator[data-de-aria-indicator-for="${el.dataset.deAriaId}"]`);
         if (indicator) indicator.remove();
 
         el.classList.remove("de-aria-marked");
@@ -440,7 +520,7 @@ export function removeOrphanedIndicators() {
     // In case some indicators are left orphaned (e.g. by a hot reload during development), remove them.
     getAllElementsListBySelector(document, ".de-aria-key-indicator").forEach(indicator => {
         const forId = indicator.dataset.deAriaIndicatorFor;
-        if (!forId || !document.querySelector(`[data-de-aria-id="${forId}"]`)) {
+        if (!forId || !getSpecificElementBySelector(document, `[data-de-aria-id="${forId}"]`)) {
             indicator.remove();
         }
     });
@@ -474,7 +554,7 @@ const SCROLLER_WATCH_FRAMES = new WeakMap();
  * @param {"ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight"} direction 
  */
 function scrollElement(el, direction) {
-    hideFocusableElements();
+    //hideFocusableElements();
     el.scrollBy({
         top: direction === "ArrowDown" ? 100 : direction === "ArrowUp" ? -100 : 0,
         left: direction === "ArrowRight" ? 100 : direction === "ArrowLeft" ? -100 : 0,
@@ -496,6 +576,9 @@ function scrollElement(el, direction) {
     const tick = () => {
         // Re-mark every frame so the box reflects current scrollability in real time.
         markScrollerElement(el);
+
+        //hideFocusableElements();
+        //showAccessibilityFocusables();
 
         const currentTop = el.scrollTop;
         const currentLeft = el.scrollLeft;
