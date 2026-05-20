@@ -352,6 +352,7 @@ function markScrollerElement(el) {
     // If nothing is scrollable in any direction, hide the box entirely.
     if (!hasVertical && !hasHorizontal) {
         box.style.display = "none";
+        el.classList.remove("de-aria-scroll-marked");
         return;
     }
 
