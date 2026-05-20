@@ -247,16 +247,14 @@ function markFocusableElement(el) {
     // works even when it isn't visible.
     indicator.style.position = "absolute";
     indicator.style.visibility = "hidden"; // hide until positioned to avoid flash
-    // @ts-ignore
-    (el.parentNode || document.body).appendChild(indicator);
+    (el.parentElement || document.body).appendChild(indicator);
 
-    if (el.parentNode) {
+    if (el.parentElement) {
         // check that the position is relative or absolute, if not emit a warning that the indicator may be misaligned and suggest adding `position: relative` to the parent element or using `data-de-aria-indicator-class` to specify a custom class for better control over indicator positioning
-        // @ts-ignore
-        const parentStyle = getComputedStyle(el.parentNode);
+        const parentStyle = getComputedStyle(el.parentElement);
         if (parentStyle.position !== "relative" && parentStyle.position !== "absolute" && parentStyle.position !== "fixed") {
             console.error(`Parent element of ${el.tagName} with data-de-aria-key should have position: relative, absolute, or fixed for correct indicator alignment. Consider adding "position: relative" to the parent`);
-            console.log("Parent element:", el.parentNode);
+            console.log("Parent element:", el.parentElement);
         }
     }
 
