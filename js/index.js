@@ -268,6 +268,12 @@ function markFocusableElement(el) {
     /** @type {HTMLElement} */
     // @ts-ignore
     const cb = indicator.offsetParent || document.body;
+
+    if (!indicator.offsetParent) {
+        console.error(`Indicator for ${el.tagName} with data-de-aria-key is not in the DOM or has no offsetParent. This most certainly will cause misalignment, if the element is in a shadow root, consider giving it a parent container`);
+        console.log("Element:", el.parentElement);
+    }
+
     const cbRect = cb.getBoundingClientRect();
     const cbWidth = cb.clientWidth;
     const cbHeight = cb.clientHeight;
