@@ -25,9 +25,14 @@ function isAccessible(el) {
     // @ts-ignore
     if (!el.dataset.deRole && typeof el.tabIndex === "number" && el.tabIndex < 0) return false;
 
-    // Walk up the tree checking for inert / hidden ancestors.
+    // Walk up the tree checking for inert / hidden ancestors, crossing shadow root boundaries.
     // @ts-ignore
     for (let node = el; node && node !== document; node = node.parentNode) {
+        // Cross shadow root boundaries: shadowRoot.parentNode is null, so jump to the host.
+        if (node.nodeType === 11 /* DOCUMENT_FRAGMENT_NODE */) {
+            // @ts-ignore
+            node = node.host;
+        }
         if (node.nodeType !== 1) continue;
         // @ts-ignore
         if (node.inert) return false;
