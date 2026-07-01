@@ -109,6 +109,7 @@ Both default to `0` if only one axis is specified.
 |---|---|
 | `end-inside` *(default)* | Flush against the trailing edge of the element, **inside** its bounding box (right edge in LTR, left in RTL) |
 | `end-outside` | Just past the trailing edge of the element, **outside** its bounding box |
+| `center` | Horizontally centered on the element |
 | `start-inside` | Flush against the leading edge of the element, **inside** its bounding box (left edge in LTR, right in RTL) |
 | `start-outside` | Just past the leading edge of the element, **outside** its bounding box |
 
@@ -126,6 +127,7 @@ Both default to `0` if only one axis is specified.
 |---|---|
 | `top-inside` *(default)* | Flush against the top edge of the element, **inside** its bounding box |
 | `top-outside` | Just above the top edge of the element, **outside** its bounding box |
+| `middle` | Vertically centered on the element |
 | `bottom-inside` | Flush against the bottom edge of the element, **inside** its bounding box |
 | `bottom-outside` | Just below the bottom edge of the element, **outside** its bounding box |
 

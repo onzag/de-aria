@@ -282,6 +282,7 @@ function markFocusableElement(el) {
     const elBottom = elTop  + rect.height;
     const elRight  = elLeft + rect.width;
 
+    let translateY = offsetY;
     if (positionV === "top-inside") {
         indicator.style.top = `${elTop}px`;
     } else if (positionV === "top-outside") {
@@ -290,13 +291,20 @@ function markFocusableElement(el) {
         indicator.style.bottom = `${cbHeight - elBottom}px`;
     } else if (positionV === "bottom-outside") {
         indicator.style.top = `${elBottom}px`;
+    } else if (positionV === "middle") {
+        indicator.style.top = `${(elTop + elBottom) / 2}px`;
+        translateY = offsetY ? `calc(-50% + ${offsetY})` : "-50%";
     }
 
     if (direction === "rtl" && offsetX) {
         offsetX = `calc(-1 * ${offsetX})`;
     }
 
-    if (direction === "rtl") {
+    let translateX = offsetX;
+    if (position === "center") {
+        indicator.style.left = `${(elLeft + elRight) / 2}px`;
+        translateX = offsetX ? `calc(-50% + ${offsetX})` : "-50%";
+    } else if (direction === "rtl") {
         if (position === "end-inside") {
             indicator.style.left = `${elLeft}px`;
         } else if (position === "end-outside") {
@@ -318,8 +326,8 @@ function markFocusableElement(el) {
         }
     }
 
-    if (offsetX || offsetY) {
-        indicator.style.transform = `translate(${offsetX || "0"}, ${offsetY || "0"})`;
+    if (translateX || translateY) {
+        indicator.style.transform = `translate(${translateX || "0"}, ${translateY || "0"})`;
     }
 
     indicator.style.visibility = "";
