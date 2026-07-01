@@ -269,20 +269,17 @@ function markFocusableElement(el) {
     // @ts-ignore
     const cb = indicator.offsetParent || document.body;
     const cbRect = cb.getBoundingClientRect();
-    const cbScrollTop = cb.scrollTop || 0;
-    const cbScrollLeft = cb.scrollLeft || 0;
     const cbWidth = cb.clientWidth;
     const cbHeight = cb.clientHeight;
 
     // Convert the element's viewport-space rect into the containing block's
     // coordinate space (origin = top-left of unscrolled content of cb).
     const rect = el.getBoundingClientRect();
-    const elTop    = rect.top    - cbRect.top  + cbScrollTop;
-    const elLeft   = rect.left   - cbRect.left + cbScrollLeft;
+    const elTop    = rect.top - cbRect.top;
+    const elLeft   = rect.left - cbRect.left;
     const elBottom = elTop  + rect.height;
     const elRight  = elLeft + rect.width;
 
-    let translateY = offsetY;
     if (positionV === "top-inside") {
         indicator.style.top = `${elTop}px`;
     } else if (positionV === "top-outside") {
@@ -292,18 +289,23 @@ function markFocusableElement(el) {
     } else if (positionV === "bottom-outside") {
         indicator.style.top = `${elBottom}px`;
     } else if (positionV === "middle") {
-        indicator.style.top = `${(elTop + elBottom) / 2}px`;
-        translateY = offsetY ? `calc(-50% + ${offsetY})` : "-50%";
+        // Centre by placing the top edge at the element's vertical centre minus
+        // half the indicator's own height (measured now that it is in the DOM).
+        indicator.style.top = `${(elTop + elBottom) / 2 - indicator.offsetHeight / 2}px`;
+        indicator.style.marginTop = "0px";
+        indicator.style.marginBottom = "0px";
     }
 
     if (direction === "rtl" && offsetX) {
         offsetX = `calc(-1 * ${offsetX})`;
     }
 
-    let translateX = offsetX;
     if (position === "center") {
-        indicator.style.left = `${(elLeft + elRight) / 2}px`;
-        translateX = offsetX ? `calc(-50% + ${offsetX})` : "-50%";
+        // Centre by placing the left edge at the element's horizontal centre minus
+        // half the indicator's own width (measured now that it is in the DOM).
+        indicator.style.left = `${(elLeft + elRight) / 2 - indicator.offsetWidth / 2}px`;
+        indicator.style.marginLeft = "0px";
+        indicator.style.marginRight = "0px";
     } else if (direction === "rtl") {
         if (position === "end-inside") {
             indicator.style.left = `${elLeft}px`;
@@ -326,8 +328,8 @@ function markFocusableElement(el) {
         }
     }
 
-    if (translateX || translateY) {
-        indicator.style.transform = `translate(${translateX || "0"}, ${translateY || "0"})`;
+    if (offsetX || offsetY) {
+        indicator.style.transform = `translate(${offsetX || "0"}, ${offsetY || "0"})`;
     }
 
     indicator.style.visibility = "";
